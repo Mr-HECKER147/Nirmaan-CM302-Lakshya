@@ -35,10 +35,21 @@ function StudyHubPage() {
           setRooms(data.rooms);
         }
 
-        const firstRoom = data.rooms[0];
-        if (firstRoom) {
-          setRoom(firstRoom);
-          return chatApi.roomMessages(firstRoom._id);
+        const searchParams = new URLSearchParams(window.location.search);
+        const invitedRoomId = searchParams.get("room");
+        const invitedCode = searchParams.get("code")?.trim().toUpperCase();
+
+        const initialRoom = data.rooms.find((roomItem) => {
+          if (invitedRoomId && roomItem._id === invitedRoomId) {
+            return true;
+          }
+
+          return invitedCode ? toRoomCode(roomItem) === invitedCode : false;
+        }) || data.rooms[0];
+
+        if (initialRoom) {
+          setRoom(initialRoom);
+          return chatApi.roomMessages(initialRoom._id);
         }
         return null;
       })
@@ -181,8 +192,9 @@ function StudyHubPage() {
       } else {
         setCameraEnabled(true);
       }
-    } catch {
-      setNotice(`Please allow ${kind} permission to use this feature.`);
+    } catch (error) {
+      const isPermissionError = error?.name === "NotAllowedError" || error?.name === "PermissionDeniedError";
+      setNotice(isPermissionError ? `Please allow ${kind} permission to use this feature.` : `Unable to access ${kind} right now.`);
       if (isMic) {
         setMicEnabled(false);
       } else {
