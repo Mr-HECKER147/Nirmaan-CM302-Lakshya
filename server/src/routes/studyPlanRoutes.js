@@ -12,11 +12,16 @@ const upload = multer({ storage: multer.memoryStorage() });
 
 // Gemini setup
 const apiKey = process.env.GEMINI_API_KEY;
+let model = null;
+
 if (!apiKey) {
-  console.error("GEMINI_API_KEY missing. Add it to .env");
+  console.warn("GEMINI_API_KEY missing. Add it to .env");
+} else if (apiKey === "YOUR_GEMINI_API_KEY_HERE") {
+  console.warn("GEMINI_API_KEY is a placeholder. Update it in .env");
+} else {
+  const genAI = new GoogleGenerativeAI(apiKey);
+  model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 }
-const genAI = new GoogleGenerativeAI(apiKey);
-const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
 // Build a day schedule: takes topics lines and converts to timed sessions
 function buildDaySchedule(studyDate, startTime, breakMinutes, topics, reminderLeadMinutes) {
@@ -73,6 +78,10 @@ function buildDaySchedule(studyDate, startTime, breakMinutes, topics, reminderLe
 // Route 1: upload PDF, extract text, ask Gemini to create topic lines
 router.post("/from-pdf", upload.single("file"), async (req, res) => {
   try {
+    if (!model) {
+      return res.status(503).json({ error: "GEMINI_API_KEY missing. Add it to server/.env" });
+    }
+
     if (!req.file) {
       return res.status(400).json({ error: "No file uploaded" });
     }

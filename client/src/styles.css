@@ -1207,6 +1207,68 @@ button {
   gap: 18px;
 }
 
+.icon-action.active {
+  color: white;
+  background: linear-gradient(135deg, var(--primary-dark), var(--primary));
+  border-color: transparent;
+}
+
+.invite-panel {
+  display: grid;
+  gap: 12px;
+  padding: 18px;
+  border-radius: 22px;
+  border: 1px solid var(--stroke);
+  background: color-mix(in srgb, var(--panel-strong) 78%, transparent);
+}
+
+.invite-panel h4 {
+  margin: 0;
+}
+
+.invite-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 10px;
+}
+
+.invite-row input {
+  border: 1px solid var(--stroke);
+  border-radius: 14px;
+  padding: 12px 14px;
+  background: var(--panel-strong);
+  color: var(--text);
+  min-width: 0;
+}
+
+.invite-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.invite-code-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  color: var(--muted);
+}
+
+.invite-code-row strong {
+  color: var(--text);
+  letter-spacing: 0.08em;
+}
+
+.hub-toast {
+  border-radius: 16px;
+  padding: 10px 12px;
+  border: 1px solid var(--stroke);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--text);
+  font-size: 0.92rem;
+}
+
 .status-dot {
   width: 10px;
   height: 10px;

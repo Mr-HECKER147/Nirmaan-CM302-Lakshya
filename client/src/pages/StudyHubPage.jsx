@@ -1,18 +1,40 @@
-import { Bot, Mic, Send, Sparkles, Users, Video } from "lucide-react";
-import { useEffect, useState } from "react";
+import { Bot, Copy, Link2, Mic, Send, Sparkles, Users, Video } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { chatApi } from "../api/client";
 import { fallbackChat } from "../data/demoData";
 
+function toRoomCode(targetRoom) {
+  const base = String(targetRoom?.name || targetRoom?._id || "LAKSHYA").replace(/[^a-z0-9]/gi, "").toUpperCase();
+  return `${base}LAKSHYA`.slice(0, 6);
+}
+
 function StudyHubPage() {
   const [room, setRoom] = useState(fallbackChat.rooms[0]);
+  const [rooms, setRooms] = useState(fallbackChat.rooms);
   const [messages, setMessages] = useState(fallbackChat.messages);
   const [members] = useState(fallbackChat.members);
   const [draft, setDraft] = useState("");
+  const [inviteEmail, setInviteEmail] = useState("");
+  const [joinCode, setJoinCode] = useState("");
+  const [notice, setNotice] = useState("");
+  const [micEnabled, setMicEnabled] = useState(false);
+  const [cameraEnabled, setCameraEnabled] = useState(false);
+  const micStreamRef = useRef(null);
+  const cameraStreamRef = useRef(null);
+  const roomCode = useMemo(() => toRoomCode(room), [room]);
+  const inviteLink = useMemo(() => {
+    const origin = window.location.origin;
+    return `${origin}/app/hub?room=${encodeURIComponent(room?._id || "")}&code=${roomCode}`;
+  }, [room, roomCode]);
 
   useEffect(() => {
     chatApi
       .listRooms()
       .then((data) => {
+        if (data.rooms?.length) {
+          setRooms(data.rooms);
+        }
+
         const firstRoom = data.rooms[0];
         if (firstRoom) {
           setRoom(firstRoom);
@@ -26,6 +48,22 @@ function StudyHubPage() {
         }
       })
       .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    if (!notice) {
+      return undefined;
+    }
+
+    const timeout = setTimeout(() => setNotice(""), 3200);
+    return () => clearTimeout(timeout);
+  }, [notice]);
+
+  useEffect(() => {
+    return () => {
+      micStreamRef.current?.getTracks().forEach((track) => track.stop());
+      cameraStreamRef.current?.getTracks().forEach((track) => track.stop());
+    };
   }, []);
 
   async function sendMessage() {
@@ -49,6 +87,110 @@ function StudyHubPage() {
     } catch {}
   }
 
+  async function inviteByEmail() {
+    const email = inviteEmail.trim().toLowerCase();
+    if (!email) {
+      setNotice("Enter an email to send an invite.");
+      return;
+    }
+
+    try {
+      await chatApi.inviteByEmail(room._id, { email });
+      setInviteEmail("");
+      setNotice("Invite sent.");
+    } catch {
+      setNotice("Unable to send invite right now. Please try again.");
+    }
+  }
+
+  function openWhatsAppInvite() {
+    const message = `Join my Lakshya Study Room: ${inviteLink}`;
+    const waLink = `https://wa.me/?text=${encodeURIComponent(message)}`;
+    window.open(waLink, "_blank", "noopener,noreferrer");
+  }
+
+  async function copyRoomCode() {
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(roomCode);
+      } else {
+        throw new Error("Clipboard unsupported");
+      }
+      setNotice("Room code copied.");
+    } catch {
+      setNotice("Unable to copy code. Please copy it manually.");
+    }
+  }
+
+  async function joinWithCode() {
+    const normalized = joinCode.trim().toUpperCase();
+    if (!normalized) {
+      setNotice("Enter a room code.");
+      return;
+    }
+
+    const matchedRoom = rooms.find((roomItem) => toRoomCode(roomItem) === normalized);
+    if (!matchedRoom) {
+      setNotice("Room code not found.");
+      return;
+    }
+
+    setRoom(matchedRoom);
+    setJoinCode("");
+
+    try {
+      const messageData = await chatApi.roomMessages(matchedRoom._id);
+      if (messageData?.messages) {
+        setMessages(messageData.messages);
+      }
+      setNotice("Joined room via code.");
+    } catch {
+      setNotice("Joined room, but failed to load latest messages.");
+    }
+  }
+
+  async function toggleMedia(kind) {
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setNotice(`Please allow ${kind} permission to use this feature.`);
+      return;
+    }
+
+    const isMic = kind === "microphone";
+    const enabled = isMic ? micEnabled : cameraEnabled;
+    const streamRef = isMic ? micStreamRef : cameraStreamRef;
+
+    if (enabled && streamRef.current) {
+      streamRef.current.getTracks().forEach((track) => track.stop());
+      streamRef.current = null;
+      if (isMic) {
+        setMicEnabled(false);
+      } else {
+        setCameraEnabled(false);
+      }
+      return;
+    }
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: isMic,
+        video: !isMic
+      });
+      streamRef.current = stream;
+      if (isMic) {
+        setMicEnabled(true);
+      } else {
+        setCameraEnabled(true);
+      }
+    } catch {
+      setNotice(`Please allow ${kind} permission to use this feature.`);
+      if (isMic) {
+        setMicEnabled(false);
+      } else {
+        setCameraEnabled(false);
+      }
+    }
+  }
+
   return (
     <div className="study-hub-layout">
       <section className="hub-chat-panel">
@@ -61,10 +203,10 @@ function StudyHubPage() {
             </div>
           </div>
           <div className="hub-actions">
-            <button className="icon-action">
+            <button className={`icon-action ${micEnabled ? "active" : ""}`} onClick={() => toggleMedia("microphone")} type="button">
               <Mic size={16} />
             </button>
-            <button className="icon-action">
+            <button className={`icon-action ${cameraEnabled ? "active" : ""}`} onClick={() => toggleMedia("camera")} type="button">
               <Video size={16} />
             </button>
           </div>
@@ -108,6 +250,49 @@ function StudyHubPage() {
             </div>
           ))}
         </div>
+
+        <div className="invite-panel">
+          <h4>Invite by email</h4>
+          <div className="invite-row">
+            <input
+              type="email"
+              placeholder="Invite by email"
+              value={inviteEmail}
+              onChange={(event) => setInviteEmail(event.target.value)}
+            />
+            <button className="primary-button compact" type="button" onClick={inviteByEmail}>
+              Invite
+            </button>
+          </div>
+          <div className="invite-options">
+            <button className="secondary-button compact" type="button" onClick={openWhatsAppInvite}>
+              <Link2 size={16} />
+              Invite via WhatsApp
+            </button>
+          </div>
+          <div className="invite-code-row">
+            <span>Invite via Unique Code</span>
+            <strong>{roomCode}</strong>
+            <button className="secondary-button compact" type="button" onClick={copyRoomCode}>
+              <Copy size={16} />
+              Copy Code
+            </button>
+          </div>
+          <div className="invite-row">
+            <input
+              type="text"
+              placeholder="Enter room code"
+              value={joinCode}
+              onChange={(event) => setJoinCode(event.target.value.toUpperCase())}
+            />
+            <button className="primary-button compact" type="button" onClick={joinWithCode}>
+              Join
+            </button>
+          </div>
+        </div>
+
+        {notice ? <div className="hub-toast">{notice}</div> : null}
+
         <div className="assistant-tip">
           <div className="panel-title">
             <Bot size={18} />
